@@ -1,4 +1,6 @@
 from pydantic import BaseModel
 
 class Type (BaseModel) :
-    pass
+    """
+    Base class for types. All types should inherit from this class.
+    """
