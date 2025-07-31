@@ -15,11 +15,11 @@ def test_combinators_combinator_has_type_schema_abstract_method () :
     assert "type_schema" in combinators.Combinator.__abstractmethods__
     
 def test_combinators_combinator_metaclass_has_from_schema_method () :
-    from combinators.typing import Type
+    from combinators.typing import TypeVariable
     
     assert hasattr(combinators.Combinator, "from_schema")
     
-    schema = Type()
+    schema = TypeVariable(name="A")
     name = "C"
     
     c = combinators.Combinator.from_schema(schema, name)
@@ -27,19 +27,30 @@ def test_combinators_combinator_metaclass_has_from_schema_method () :
     assert c.__name__ == name
     assert c.type_schema() == schema
  
-# TODO: from_string method
+def test_combinators_combinator_metaclass_hass_from_string_method () :
     
+    from combinators.parsers import parse_type_expr
+    
+    assert hasattr(combinators.Combinator, "from_string")
+    
+    schema_string = "A -> B -> A"
+    schema = parse_type_expr(schema_string)
+    
+    name = "K"
+    
+    K = combinators.Combinator.from_string(schema_string, name)
+    
+    assert K.__name__ == name
+    assert K.type_schema() == schema
+
 def test_combinators_combinator_has_expected_properties () :
     """Expected Properties:
         - args [Combinator] : list of combinators as arguments (Default: [])
     """
     
-    from combinators.typing import Type
+    from combinators.typing import TypeVariable
     
-    class SampleCombinator (combinators.Combinator) :
-        @staticmethod
-        def type_schema() -> Type:
-            return Type()
+    SampleCombinator = combinators.Combinator.from_schema(TypeVariable(name="A"))
     
     c1 = SampleCombinator()
     c2 = SampleCombinator()

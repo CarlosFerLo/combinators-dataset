@@ -1,4 +1,5 @@
 import combinators
+import pytest
 
 def test_combinators_has_typing_module () :
     assert hasattr(combinators, "typing")
@@ -12,6 +13,13 @@ def test_combinators_base_type_is_pydantic_base_model () :
     import pydantic
     
     assert issubclass(combinators.typing.Type, pydantic.BaseModel)
+    
+def test_combinators_base_type_has_to_string_abstract_method () :
+    
+    import abc
+    
+    assert issubclass(combinators.typing.Type, abc.ABC)
+    assert "to_string" in combinators.typing.Type.__abstractmethods__
     
 # --- Type Variable -----------------------------------
     
@@ -42,26 +50,46 @@ def test_combinator_type_variable_has_default_is_arbitrary_true () :
     assert var.name == "B"
     assert var.is_arbitrary == True
     
-# --- Implication ----------------------------------------
+# --- Arrow ----------------------------------------
 
-def test_combinators_has_implication () :
-    assert hasattr(combinators.typing, "Implication")
+def test_combinators_has_arrow () :
+    assert hasattr(combinators.typing, "Arrow")
     
-def test_combinators_implication_is_a_subclass_of_base_type () :
-    assert issubclass(combinators.typing.Implication, combinators.typing.Type)
+def test_combinators_arrow_is_a_subclass_of_base_type () :
+    assert issubclass(combinators.typing.Arrow, combinators.typing.Type)
     
-def test_combinators_implication_has_expected_properties () :
+def test_combinators_arrow_has_expected_properties () :
     """Expected Properties:
         - left [Type] : type at the left
         - right [Type] : type at the right
     """
     
-    from combinators.typing import TypeVariable, Implication
+    from combinators.typing import TypeVariable, Arrow
     
     A = TypeVariable(name="A")
     B = TypeVariable(name="B")
     
-    imp = Implication(left=A, right=B)
+    imp = Arrow(left=A, right=B)
     
     assert imp.left == A
     assert imp.right == B
+    
+# --- Dumping to String -------------------------------------
+
+@pytest.mark.parametrize("expr", [
+    "A",
+    "_X",
+    "A -> B",
+    "A -> B -> C",
+    "(A -> B) -> C",
+    "((A -> B) -> C) -> D",
+    "_X -> _Y -> Z",
+    "(_X -> (_Y -> Z)) -> A",
+])
+def test_round_trip(expr: str):
+    from combinators.parsers import parse_type_expr
+    
+    parsed = parse_type_expr(expr)
+    dumped = parsed.to_string()
+    reparsed = parse_type_expr(dumped)
+    assert reparsed == parsed, f"Expected {parsed} == {reparsed}"

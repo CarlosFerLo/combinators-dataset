@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Type
 
 from .typing import Type as _Type
+from .parsers import parse_type_expr
 
 class Combinator (BaseModel, ABC) :
     
@@ -25,4 +26,9 @@ class Combinator (BaseModel, ABC) :
             
         return NewCombinator
     
+    @staticmethod
+    def from_string(string: str, name: Optional[str] = None) -> Type["Combinator"] :
+        schema = parse_type_expr(string)
+        
+        return Combinator.from_schema(schema, name)
     

@@ -1,7 +1,7 @@
 from typing import List, Tuple
 import re
 
-from ..typing import Type, TypeVariable, Implication
+from ..typing import Type, TypeVariable, Arrow
 
 def parse_type_expr(string: str) -> Type:
         tokens = _tokenize(string)
@@ -22,7 +22,7 @@ def _parse_expr(tokens: List[str]) -> Tuple[Type, List[str]]:
     if tokens and tokens[0] == "->":
         tokens = tokens[1:]  # consume '->'
         right, tokens = _parse_expr(tokens)
-        return Implication(left=left, right=right), tokens
+        return Arrow(left=left, right=right), tokens
     else:
         return left, tokens
 
