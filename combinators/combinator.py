@@ -1,13 +1,24 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from abc import ABC, abstractmethod
-from typing import List, Optional, Type
+from typing import List, Optional, Type, ClassVar
 
-from .typing import Type as _Type
+from .typing import Type as _Type, Arrow
 from .parsers import parse_type_expr
 
 class Combinator (BaseModel, ABC) :
     
+    arity: ClassVar[int]
     args: List["Combinator"] = []
+    
+    def __init_subclass__(cls):
+        if 'arity' not in cls.__dict__:
+            raise TypeError(f"{cls.__name__} must define 'arity'")
+        
+    @field_validator("args")
+    def check_args_length_not_bigger_than_arity (cls, args: List["Combinator"]) :
+        if len(args) > cls.arity :
+            raise ValueError(f"The number of arguments cannot be bigger than the arity.\nNumber of arguments: {len(args)}\nArity: {cls.arity}")
+        return args
     
     @staticmethod
     @abstractmethod
@@ -16,7 +27,10 @@ class Combinator (BaseModel, ABC) :
     
     @staticmethod
     def from_schema (schema: _Type, name: Optional[str] = None) -> Type["Combinator"] :
+        
+        arity_ = Combinator._get_args(schema)
         class NewCombinator (Combinator) :
+            arity: ClassVar[int] = arity_
             @staticmethod
             def type_schema() -> _Type:
                 return schema
@@ -32,3 +46,11 @@ class Combinator (BaseModel, ABC) :
         
         return Combinator.from_schema(schema, name)
     
+    @staticmethod
+    def _get_args (schema: _Type) -> int :
+        arity = 0
+        while isinstance(schema, Arrow) :
+            arity += 1
+            schema = schema.right
+            
+        return arity

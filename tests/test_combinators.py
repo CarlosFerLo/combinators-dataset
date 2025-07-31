@@ -1,4 +1,7 @@
 import combinators
+import pytest
+
+from typing import Tuple
 
 def test_combinators_has_combinator () :
     assert hasattr(combinators, "Combinator")
@@ -42,15 +45,38 @@ def test_combinators_combinator_metaclass_hass_from_string_method () :
     
     assert K.__name__ == name
     assert K.type_schema() == schema
+    
+def test_combinators_combinator_subclasses_fail_if_no_arity () :
+    
+    from combinators.typing import Type, TypeVariable
+    
+    with pytest.raises(TypeError) :
+        class SampleCombinator (combinators.Combinator) : # type: ignore
+            @staticmethod
+            def type_schema() -> Type:
+                return TypeVariable(name="A")
+
+@pytest.mark.parametrize("schema", [
+    ["A", 0],
+    ["_X", 0],
+    ["A -> B", 1],
+    ["A -> B -> C", 2],
+    ["(A -> B) -> C", 1],
+    ["((A -> B) -> C) -> D", 1],
+    ["_X -> _Y -> Z", 2],
+    ["(_X -> (_Y -> Z)) -> A", 1],
+])
+def test_combinators_combinator_from_schema_calculates_correct_arg_max (schema: Tuple[str, int]) :
+    SampleCombinator = combinators.Combinator.from_string(schema[0], "SampleCombinator")
+    
+    assert SampleCombinator.arity == schema[1]
 
 def test_combinators_combinator_has_expected_properties () :
     """Expected Properties:
         - args [Combinator] : list of combinators as arguments (Default: [])
     """
     
-    from combinators.typing import TypeVariable
-    
-    SampleCombinator = combinators.Combinator.from_schema(TypeVariable(name="A"))
+    SampleCombinator = combinators.Combinator.from_string("A -> B -> C")
     
     c1 = SampleCombinator()
     c2 = SampleCombinator()
@@ -61,3 +87,20 @@ def test_combinators_combinator_has_expected_properties () :
     assert c2.args == []
     assert c3.args == [c1, c2]
     
+@pytest.mark.parametrize("input", [
+    ["A", 1],
+    ["A -> B", 3],
+    ["A -> B -> C", 5],
+    ["(A -> B) -> C", 2],
+])
+def test_combinators_combinator_raises_validation_error_if_try_to_init_with_to_many_args (input: Tuple[str, int]) :
+    
+    import pydantic
+    
+    base_combinator = combinators.Combinator.from_string("A")
+    sample_combinator = combinators.Combinator.from_string(input[0])
+    
+    args = [ base_combinator() ] * input[1]
+    
+    with pytest.raises(pydantic.ValidationError) :
+        sample_combinator(args=args)
