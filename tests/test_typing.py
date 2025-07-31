@@ -1,7 +1,5 @@
 import combinators
 
-import pydantic
-
 def test_combinators_has_typing_module () :
     assert hasattr(combinators, "typing")
 
@@ -9,7 +7,10 @@ def test_combinators_has_typing_module () :
 def test_combinators_has_base_type () :
     assert hasattr(combinators.typing, "Type")
     
-def test_combinators_base_type_is_pydantic_base_module () :
+def test_combinators_base_type_is_pydantic_base_model () :
+    
+    import pydantic
+    
     assert issubclass(combinators.typing.Type, pydantic.BaseModel)
     
 # --- Type Variable -----------------------------------
