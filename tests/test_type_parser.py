@@ -1,6 +1,7 @@
 import combinators
 import pytest
-def test_combinators_base_type_has_parse_string_method () :
+
+def test_combinators_parsers_has_parse_type_expr () :
     assert hasattr(combinators.parsers, "parse_type_expr")
 
 def test_parse_single_variable():

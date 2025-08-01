@@ -54,3 +54,7 @@ class Combinator (BaseModel, ABC) :
             schema = schema.right
             
         return arity
+
+
+K = Combinator.from_string("A -> B -> A", name="K")
+S = Combinator.from_string("(A -> B -> C) -> (A -> B) -> A -> C", name="S")

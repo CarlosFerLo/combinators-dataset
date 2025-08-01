@@ -104,3 +104,19 @@ def test_combinators_combinator_raises_validation_error_if_try_to_init_with_to_m
     
     with pytest.raises(pydantic.ValidationError) :
         sample_combinator(args=args)
+        
+def test_combinators_has_combinators_K_and_S () :
+    assert hasattr(combinators, "K")
+    assert hasattr(combinators, "S")
+    
+    assert issubclass(combinators.K, combinators.Combinator)
+    assert issubclass(combinators.S, combinators.Combinator)
+    
+    assert combinators.K.__name__ == "K"
+    assert combinators.S.__name__ == "S"
+    
+    assert combinators.K.type_schema().to_string() == "A -> B -> A"
+    assert combinators.S.type_schema().to_string() == "(A -> B -> C) -> (A -> B) -> A -> C"
+    
+    assert combinators.K.arity == 2
+    assert combinators.S.arity == 3
