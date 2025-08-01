@@ -120,3 +120,16 @@ def test_combinators_has_combinators_K_and_S () :
     
     assert combinators.K.arity == 2
     assert combinators.S.arity == 3
+    
+def test_combinators_combinator_has_get_type_label_method () :
+    assert hasattr(combinators.Combinator, "get_type_label")
+    
+""" TODO:
+@pytest.mark.parametrize("expr", ["S", "K"])
+def test_combinator_combinator_get_type_label_method_on_simple_cases (expr: str) :
+    
+    from combinators.parsers import sk_parser, parse_type_expr
+    
+    C = sk_parser(expr)
+    assert C.get_type_label() == parse_type_expr("")
+"""

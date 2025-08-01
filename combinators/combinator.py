@@ -54,6 +54,10 @@ class Combinator (BaseModel, ABC) :
             schema = schema.right
             
         return arity
+    
+    # TODO: implement this
+    def get_type_label (self) -> _Type : # type: ignore
+        pass
 
 
 K = Combinator.from_string("A -> B -> A", name="K")

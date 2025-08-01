@@ -1,6 +1,8 @@
 import combinators
 import pytest
 
+from typing import Tuple
+
 def test_combinators_has_typing_module () :
     assert hasattr(combinators, "typing")
 
@@ -73,6 +75,24 @@ def test_combinators_arrow_has_expected_properties () :
     
     assert imp.left == A
     assert imp.right == B
+    
+# --- Equality -------------------------------------
+
+@pytest.mark.parametrize("expr", [
+    ["A", "_B"],
+    ["_X", "Y"],
+    ["A -> _B", "C -> A"],
+    ["_p -> A", "_q -> _B"],
+    ["A -> _p", "B -> _q -> A"],
+    ["A -> B -> A", "B -> A -> C"]
+])
+def test_inequality_of_types (expr: Tuple[str, str]) :
+    from combinators.parsers import parse_type_expr
+        
+    T1 = parse_type_expr(expr[0])
+    T2 = parse_type_expr(expr[1])
+    
+    assert T1 != T2
     
 # --- Dumping to String -------------------------------------
 
