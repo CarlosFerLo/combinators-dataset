@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "combinators"
+name = "combinators-dataset"
 version = "0.1.0"
-description = ""
+description = "Typed Combinators Dataset"
 authors = ["Carlos Fernandez <carlos.ferlo@outlook.com>"]
 readme = "README.md"
 
