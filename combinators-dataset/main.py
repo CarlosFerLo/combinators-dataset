@@ -2,18 +2,21 @@ import subprocess
 import tempfile
 from pathlib import Path
 import re
-from typing import List, Set, Generator
+from typing import List, Set, Generator, Iterable, Dict
+from collections import defaultdict
 from dataclasses import dataclass
 import random
 import json
 from tqdm import tqdm
 
-FILEPATH = "./combinators/dataset.jsonl"
+FILEPATH = "./combinators-dataset/dataset.jsonl"
 
-N = 100000
+N = 1000000
+
 MAX_DEPTH = 6
+MAX_PER_TYPE = 5
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 10000
 
 HEADER = """\
 universe u
@@ -33,7 +36,7 @@ def generate_combinator(max_depth: int=6) -> str:
             return random.choice(['S', 'K'])
         else:
             choice = random.random()
-            if choice < 0.3:
+            if choice < 0.4:
                 return random.choice(['S', 'K'])
             else:
                 left = generate_combinator(max_depth - 1)
@@ -119,6 +122,23 @@ def normalize_metavariables(results: List[TypedPair]) -> List[TypedPair]:
 
     return normalized
 
+def limit_shortest_pairs_per_type(
+    pairs: Iterable[TypedPair], 
+    max_per_type: int = 5
+) -> List[TypedPair]:
+    grouped: Dict[str, List[TypedPair]] = defaultdict(list)
+    
+    # Group pairs by type
+    for pair in pairs:
+        grouped[pair.type].append(pair)
+    
+    # Sort within each group and take N shortest
+    filtered: List[TypedPair] = []
+    for _, items in grouped.items():
+        items.sort(key=lambda p: len(p.term))
+        filtered.extend(items[:max_per_type])
+    
+    return filtered
 
 def batch_iterator(data: List[str], batch_size: int) -> Generator[List[str], None, None]:
     for i in range(0, len(data), batch_size):
@@ -137,13 +157,25 @@ if __name__ == "__main__" :
     expressions = generate_combinator_set(N, MAX_DEPTH)
     
     print("Processing SK expressions...")
+    pairs: List[TypedPair] = []
+    for batch in tqdm(process_expressions(expressions, BATCH_SIZE), total=N/BATCH_SIZE) :
+        pairs.extend(batch)
+        
+    print(f"Processed pairs: {len(pairs)}")
+    
+    print("Filtering pairs...")
+    
+    filtered_pairs: List[TypedPair] = limit_shortest_pairs_per_type(pairs, MAX_PER_TYPE)
+    
+    print(f"Filtered pairs: {len(filtered_pairs)}")
+    
+    print("Dumping data...")
     with open(FILEPATH, "a", encoding="utf-8") as f :
-        for i, batch in tqdm(enumerate(process_expressions(expressions, BATCH_SIZE)), total=N/BATCH_SIZE) :
-            for pair in batch:
-                    data = {
-                        "term": pair.term,  
-                        "type": pair.type 
-                    }
-                    f.write(json.dumps(data) + '\n')
+        for pair in filtered_pairs:
+                data = {
+                    "term": pair.term,  
+                    "type": pair.type 
+                }
+                f.write(json.dumps(data) + '\n')
                     
     print("Finished 🎉")
