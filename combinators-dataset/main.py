@@ -107,6 +107,8 @@ def normalize_metavariables(results: List[TypedPair]) -> List[TypedPair]:
         new_type = type_str
         for mv, rep in replacement_map.items():
             new_type = new_type.replace(mv, rep)
+            
+        new_type = new_type.replace("\u2192", "->")
 
         normalized.append(
             TypedPair(
