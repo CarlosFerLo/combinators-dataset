@@ -1,4 +1,5 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set, Optional
+import json
 from pathlib import Path
 import logging
 import sqlite3
@@ -10,8 +11,6 @@ import random
 import os
 import threading
 from .annotation import annotate, parse_sk
-import shutil
-from .utils import dump_jsonl
 
 
 logging.basicConfig(
@@ -20,10 +19,11 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
-DATASET_PATH = Path("combinators-dataset/dataset")
+DATASET_PATH = Path("combinators-dataset/dataset.jsonl")
 SEEN_DB_PATH = Path("combinators-dataset/seen")
 
 BATCH_SIZE = 1000
+MAX_BACKLOG = 1_000_000
 
 MAX_DEPTH = 6
 
@@ -41,9 +41,25 @@ class MyManager(BaseManager):
 class CombinatorsDataset:
     _typed_pairs: Dict[str, List[str]] = {}
 
-    def __init__(self) -> None:
+    def __init__(self, path: Optional[Path] = None) -> None:
 
         self._typed_pairs = {}
+
+        if path:
+            logging.info(f"Loading dataset from '{path}'...")
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        pair = json.loads(line)
+                        self.add(pair["type"], pair["term"])
+
+                logging.info(f"Finished loading the dataset (entries: {len(self)}) ✅")
+
+            except Exception as e:
+                logging.error(
+                    f"The following error occurred while retrieving the dataset from '{path}' 🛑\n---\n{e}\n---"
+                )
+                raise Error(e) from e
 
     def __getitem__(self, key: str) -> List[str]:
         return self._typed_pairs.get(key, [])
@@ -74,8 +90,8 @@ class CombinatorsDataset:
         self, val: float = 0.1, test: float = 0.1
     ) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[str, str]]]:
 
-        train = 1 - val - test
-        if train < 0:
+        test = 1 - val - test
+        if test < 0:
             raise ValueError("Partitions must add up to 1")
 
         types = list(self._typed_pairs.keys())
@@ -102,6 +118,20 @@ class CombinatorsDataset:
 
         return train_pairs, val_pairs, test_pairs
 
+    def to_jsonl(self, path: Path):
+        logging.info(f"Dumping dataset to file: '{path}'...")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                for type in self._typed_pairs:
+                    for term in self[type]:
+                        data = {"term": term, "type": type}
+                        f.write(json.dumps(data) + "\n")
+        except Exception as e:
+            logging.error(
+                f"The following error occurred while dumping the dataset to '{path}' 🛑\n---\n{e}\n---"
+            )
+            raise Error(e) from e
+
 
 MyManager.register("CombinatorsDataset", CombinatorsDataset)
 
@@ -111,8 +141,8 @@ class SeenDB:
 
     def __init__(self, path: Path):
         try:
-            self.path = path / "data"
-            self.conn = sqlite3.connect(str(path / "data"), check_same_thread=False)
+            self.path = path
+            self.conn = sqlite3.connect(str(path), check_same_thread=False)
             self.conn.execute("PRAGMA journal_mode=WAL;")
             self.conn.execute("CREATE TABLE IF NOT EXISTS seen (term TEXT PRIMARY KEY)")
             self.conn.commit()
@@ -164,15 +194,12 @@ def sk_generation_process(q_gen) -> None:
 
 def dedup_and_batching_process(q_in, q_out) -> None:
     batch = []
-    if not SEEN_DB_PATH.exists():
-        SEEN_DB_PATH.mkdir()
     seen = SeenDB(SEEN_DB_PATH)
     while True:
         term = q_in.get()
 
         if term == "STOP":
             logging.info(f"[Dedup {os.getpid()}]Stopping gracefully...")
-            q_out.put(batch)
             break
 
         if seen.add_if_new(term):
@@ -199,14 +226,7 @@ def type_annotation_process(q_in, dataset: CombinatorsDataset) -> None:
         # Run Lean on the batch
         if isinstance(batch, list):
             parsed_pairs = [(expr, parse_sk(expr)) for expr in batch]
-            results: List[Tuple[str, str]] = []
-
-            for term, tree in parsed_pairs:
-                try:
-                    results.append((str(annotate(tree)["type"]), term))
-                except Exception:
-                    continue
-
+            results = [(annotate(tree)["type"], expr) for (expr, tree) in parsed_pairs]
             if results:
                 new = dataset.extend(results)
                 logging.info(
@@ -240,17 +260,17 @@ if __name__ == "__main__":
 
     try:
         if not DATASET_PATH.exists():
-            logging.info(f"Creating {DATASET_PATH} folder")
-            DATASET_PATH.mkdir()
-        dataset = manager.CombinatorsDataset()  # type: ignore
+            logging.info(f"Creating {DATASET_PATH} file")
+            DATASET_PATH.touch()
+        dataset = manager.CombinatorsDataset(DATASET_PATH)  # type: ignore
     except Error:
         logging.info("Exiting...")
         sys.exit()
 
     logging.info("Initializing workers...")
 
-    q_gen_dedup = mp.Queue(maxsize=100)
-    q_dedup_proc = mp.Queue(maxsize=10)
+    q_gen_dedup = mp.Queue(maxsize=1000)
+    q_dedup_proc = mp.Queue(maxsize=100)
 
     p1 = mp.Process(target=sk_generation_process, args=(q_gen_dedup,))
     p2 = mp.Process(target=dedup_and_batching_process, args=(q_gen_dedup, q_dedup_proc))
@@ -276,33 +296,16 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logging.info("Stopping processes...")
         p1.terminate()
-        p2.terminate()
-        p3.terminate()
 
-    finally:
+        q_gen_dedup.put("STOP")
 
-        logging.info(f"Cleaning Seen DB path ('{SEEN_DB_PATH}')...")
+        p2.join()
 
-        shutil.rmtree(SEEN_DB_PATH)
+        q_dedup_proc.put("STOP")
 
-        logging.info("Generating partitions...")
+        p3.join()
 
         train, val, test = dataset.get_partitions()
-
-        logging.info(
-            f"Dumping test set to {DATASET_PATH / 'train.jsonl'}... (length: {len(train)})"
-        )
-        dump_jsonl(DATASET_PATH / "train.jsonl", train)
-
-        logging.info(
-            f"Dumping validation set to {DATASET_PATH / 'validation.jsonl'}... (length: {len(val)})"
-        )
-        dump_jsonl(DATASET_PATH / "validation.jsonl", val)
-
-        logging.info(
-            f"Dumping test set to {DATASET_PATH / 'test.jsonl'}... (length: {len(test)})"
-        )
-        dump_jsonl(DATASET_PATH / "test.jsonl", test)
 
         manager.shutdown()
 

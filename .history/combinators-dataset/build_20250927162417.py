@@ -1,4 +1,5 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set, Optional
+import json
 from pathlib import Path
 import logging
 import sqlite3
@@ -11,7 +12,6 @@ import os
 import threading
 from .annotation import annotate, parse_sk
 import shutil
-from .utils import dump_jsonl
 
 
 logging.basicConfig(
@@ -292,17 +292,17 @@ if __name__ == "__main__":
         logging.info(
             f"Dumping test set to {DATASET_PATH / 'train.jsonl'}... (length: {len(train)})"
         )
-        dump_jsonl(DATASET_PATH / "train.jsonl", train)
+        CombinatorsDataset.to_jsonl(DATASET_PATH / "train.jsonl", train)
 
         logging.info(
             f"Dumping validation set to {DATASET_PATH / 'validation.jsonl'}... (length: {len(val)})"
         )
-        dump_jsonl(DATASET_PATH / "validation.jsonl", val)
+        CombinatorsDataset.to_jsonl(DATASET_PATH / "validation.jsonl", val)
 
         logging.info(
             f"Dumping test set to {DATASET_PATH / 'test.jsonl'}... (length: {len(test)})"
         )
-        dump_jsonl(DATASET_PATH / "test.jsonl", test)
+        CombinatorsDataset.to_jsonl(DATASET_PATH / "test.jsonl", test)
 
         manager.shutdown()
 

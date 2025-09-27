@@ -1,4 +1,5 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set, Optional
+import json
 from pathlib import Path
 import logging
 import sqlite3
@@ -10,8 +11,6 @@ import random
 import os
 import threading
 from .annotation import annotate, parse_sk
-import shutil
-from .utils import dump_jsonl
 
 
 logging.basicConfig(
@@ -102,6 +101,19 @@ class CombinatorsDataset:
 
         return train_pairs, val_pairs, test_pairs
 
+    @staticmethod
+    def to_jsonl(path: Path, pairs: List[Tuple[str, str]]):
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                for type, term in pairs:
+                    data = {"term": term, "type": type}
+                    f.write(json.dumps(data) + "\n")
+        except Exception as e:
+            logging.error(
+                f"The following error occurred while dumping the dataset to '{path}' 🛑\n---\n{e}\n---"
+            )
+            raise Error(e) from e
+
 
 MyManager.register("CombinatorsDataset", CombinatorsDataset)
 
@@ -111,8 +123,8 @@ class SeenDB:
 
     def __init__(self, path: Path):
         try:
-            self.path = path / "data"
-            self.conn = sqlite3.connect(str(path / "data"), check_same_thread=False)
+            self.path = path
+            self.conn = sqlite3.connect(str(path), check_same_thread=False)
             self.conn.execute("PRAGMA journal_mode=WAL;")
             self.conn.execute("CREATE TABLE IF NOT EXISTS seen (term TEXT PRIMARY KEY)")
             self.conn.commit()
@@ -164,8 +176,6 @@ def sk_generation_process(q_gen) -> None:
 
 def dedup_and_batching_process(q_in, q_out) -> None:
     batch = []
-    if not SEEN_DB_PATH.exists():
-        SEEN_DB_PATH.mkdir()
     seen = SeenDB(SEEN_DB_PATH)
     while True:
         term = q_in.get()
@@ -281,28 +291,22 @@ if __name__ == "__main__":
 
     finally:
 
-        logging.info(f"Cleaning Seen DB path ('{SEEN_DB_PATH}')...")
-
-        shutil.rmtree(SEEN_DB_PATH)
-
-        logging.info("Generating partitions...")
-
         train, val, test = dataset.get_partitions()
 
         logging.info(
             f"Dumping test set to {DATASET_PATH / 'train.jsonl'}... (length: {len(train)})"
         )
-        dump_jsonl(DATASET_PATH / "train.jsonl", train)
+        CombinatorsDataset.to_jsonl(DATASET_PATH / "train.jsonl", train)
 
         logging.info(
             f"Dumping validation set to {DATASET_PATH / 'validation.jsonl'}... (length: {len(val)})"
         )
-        dump_jsonl(DATASET_PATH / "validation.jsonl", val)
+        CombinatorsDataset.to_jsonl(DATASET_PATH / "validation.jsonl", val)
 
         logging.info(
             f"Dumping test set to {DATASET_PATH / 'test.jsonl'}... (length: {len(test)})"
         )
-        dump_jsonl(DATASET_PATH / "test.jsonl", test)
+        CombinatorsDataset.to_jsonl(DATASET_PATH / "test.jsonl", test)
 
         manager.shutdown()
 

@@ -1,4 +1,5 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set, Optional
+import json
 from pathlib import Path
 import logging
 import sqlite3
@@ -11,7 +12,7 @@ import os
 import threading
 from .annotation import annotate, parse_sk
 import shutil
-from .utils import dump_jsonl
+from .utils.dump_jsonl import dump_jsonl
 
 
 logging.basicConfig(
