@@ -11,7 +11,7 @@ import os
 import threading
 from .annotation import annotate, parse_sk
 import shutil
-from .utils import dump_jsonl, simplify_sk
+from .utils import dump_jsonl, simplify_sk, simplify_type
 
 
 logging.basicConfig(
@@ -203,7 +203,7 @@ def type_annotation_process(q_in, dataset: CombinatorsDataset) -> None:
 
             for term, tree in parsed_pairs:
                 try:
-                    results.append((str(annotate(tree)["type"]), term))
+                    results.append((simplify_type(str(annotate(tree)["type"])), term))
                 except Exception:
                     continue
 
