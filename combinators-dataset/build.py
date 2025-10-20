@@ -11,7 +11,7 @@ import os
 import threading
 from .annotation import annotate, parse_sk
 import shutil
-from .utils import dump_jsonl
+from .utils import dump_jsonl, simplify_sk
 
 
 logging.basicConfig(
@@ -154,7 +154,7 @@ def sk_generation_process(q_gen) -> None:
                     return f"({left} {right})"
 
         expr = generate_combinator(MAX_DEPTH)
-        q_gen.put(expr)
+        q_gen.put(simplify_sk(expr))
         logging.debug(f"[Gen {os.getpid()}] Generated string: {expr}")
         counter += 1
 
