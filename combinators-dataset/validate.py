@@ -18,12 +18,81 @@ logging.basicConfig(
 DATASET_DIR = Path("combinators-dataset/dataset")
 BATCH_SIZE = 100
 
-LEAN_HEADER = """universe u
+LEAN_HEADER = (
+    LEAN_HEADER
+) = """
+import Lean
+open Lean Elab Command Meta Term
+
+universe u
 variable {α β γ : Type u}
 def s (f: α → β → γ) (g: α → β) (x: α) : γ := f x (g x)
 def k (x: α) (_: β) : α := x
 
-variable { A B C D E F G H I J L M N O P Q R T U V W X Y Z : Type u }
+-- Declare type variables as axioms so they're in scope everywhere
+axiom A : Type u
+axiom B : Type u
+axiom C : Type u
+axiom D : Type u
+axiom E : Type u
+axiom F : Type u
+axiom G : Type u
+axiom H : Type u
+axiom I : Type u
+axiom J : Type u
+axiom L : Type u
+axiom M : Type u
+axiom N : Type u
+axiom O : Type u
+axiom P : Type u
+axiom Q : Type u
+axiom R : Type u
+axiom T : Type u
+axiom U : Type u
+axiom V : Type u
+axiom W : Type u
+axiom X : Type u
+axiom Y : Type u
+axiom Z : Type u
+
+syntax (name := checkStr) "#check_str" str str : command
+
+@[command_elab checkStr]
+def elabCheckStr : CommandElab := fun stx => do
+  try
+    -- Extract the two literal strings
+    let some tyStr   := stx[1].isStrLit? | throwError "expected first argument to be a string literal"
+    let some termStr := stx[2].isStrLit? | throwError "expected second argument to be a string literal"
+
+    -- Parse the strings into Syntax; runParserCategory returns Except
+    let tyStx ← match Parser.runParserCategory (← getEnv) `term tyStr with
+      | .ok stx  => pure stx
+      | .error e => throwError "parse type failed: {e}"
+
+    let termStx ← match Parser.runParserCategory (← getEnv) `term termStr with
+      | .ok stx  => pure stx
+      | .error e => throwError "parse term failed: {e}"
+
+    -- Elaborate inside TermElabM
+    let ok ← liftTermElabM do
+      let expectedTy ← elabType tyStx
+      -- Elaborate the term WITHOUT an expected type to get its true inferred type
+      let termExpr ← elabTerm termStx none
+      let actualTy ← inferType termExpr
+      -- Check if the types are definitionally equal
+      isDefEq actualTy expectedTy
+
+    if ok then
+      logInfo m!"✅ {termStr} : {tyStr}"
+    else
+      logInfo m!"❌ {termStr} : {tyStr} (type mismatch)"
+  catch err =>
+    -- Catch any error and print ❌ instead of failing
+    let termStr := stx[2].isStrLit?.getD "<unknown term>"
+    let tyStr   := stx[1].isStrLit?.getD "<unknown type>"
+    logInfo m!"❌ {termStr} : {tyStr} — {← err.toMessageData.toString}"
+  pure ()
+
 """
 
 TypedPairs = List[Tuple[str, str]]
@@ -67,34 +136,57 @@ def validate(batch: TypedPairs) -> Tuple[TypedPairs, TypedPairs]:
     ) as tmp:
         tmp.write(LEAN_HEADER)
 
+        # write pairs as: #check_str "<type>" "<term>"
         for pair in batch:
-            tmp.write(f"#check ( {pair[1].lower()} : {pair[0]} )\n")
+            tmp.write(f'#check_str "{pair[0]}"  "{pair[1].lower()}"\n')
     try:
 
         results = subprocess.run(
-            ["lean", "--json", tmp.name], capture_output=True, text=True
+            ["lean", "--json", tmp.name],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
 
-        output: List[Dict[str, Union[str, int]]] = []
-        for line in results.stdout.splitlines():
+        output = results.stdout + "\n" + results.stderr
 
-            if line.strip():
-                out = json.loads(line)
-                output.append(out)
+        logging.debug(f"Lean output:\n{output}")
 
-        valid_pairs: TypedPairs = []
-        invalid_pairs: TypedPairs = []
+        val: List[bool] = []
+        for line in output.splitlines():
 
-        for out, pair in zip(output, batch):
-            if out["severity"] == "error":
-                invalid_pairs.append(pair)
-            else:
-                valid_pairs.append(pair)
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                msg = json.loads(line)
+                if msg.get("severity") == "information":
+
+                    text = msg["data"].strip()
+
+                    if text.startswith("✅"):
+                        val.append(True)
+                    elif text.startswith("❌"):
+                        val.append(False)
+            except json.JSONDecodeError:
+                continue
 
     finally:
         tmp.close()
         if os.path.exists(tmp.name):
             os.remove(tmp.name)
+
+    assert len(batch) == len(val)
+
+    valid_pairs: TypedPairs = []
+    invalid_pairs: TypedPairs = []
+
+    for pair, ok in zip(batch, val):
+        if ok:
+            valid_pairs.append(pair)
+        else:
+            invalid_pairs.append(pair)
 
     return (valid_pairs, invalid_pairs)
 
